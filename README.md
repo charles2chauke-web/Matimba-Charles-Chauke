@@ -2,6 +2,11 @@
 
 Data-Driven Football Predictions and Betting Analysis
 
+**Updating an existing download?** Follow [UPDATE-WINDOWS.md](UPDATE-WINDOWS.md)
+to preserve your local data. Today's Top Five now has a functional daily research
+review and exclusion report; [qualification is still separate](docs/daily-shortlist.md)
+and cannot be bypassed by unverified estimates.
+
 ## Run the working research model
 
 Start the app with `start-windows.cmd`, open the private local address below, and

@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from backend import history, models, odds, backtesting, public_data
+from backend import history, models, odds, backtesting, public_data, shortlist
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get('CHARLES_DATA_DIR', ROOT / 'data'))
@@ -354,6 +354,15 @@ def import_history(payload: HistoricalImport):
         raise HTTPException(422, str(error)) from None
     with db() as connection:
         return history.ingest(connection, records, imported_at.isoformat())
+
+
+@app.get('/api/shortlist')
+def daily_shortlist(model: str=Query('poisson',pattern='^(poisson|dixon_coles|xg_poisson)$')):
+    with db() as connection:
+        try:
+            return shortlist.build(connection,get_settings(),now().astimezone(SAST),model)
+        except ValueError as error:
+            raise HTTPException(422,str(error)) from None
 
 
 @app.get('/api/history')
