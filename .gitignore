@@ -1,4 +1,5 @@
 .venv/
+.venv-win312/
 __pycache__/
 .pytest_cache/
 data/

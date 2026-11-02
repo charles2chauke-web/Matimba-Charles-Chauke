@@ -73,7 +73,7 @@ does not establish readiness; zero bets leave profit/ROI unavailable.
 
 ## Windows startup
 
-1. Install Python 3.12+ (including `py`) and Node.js 22.12+ LTS.
+1. Install **Python 3.12 for Windows x86-64** (including `py`) and Node.js 22.12+ LTS.
 2. Double-click `start-windows.cmd` in this folder. Internet access is required for
    first-time dependencies and refreshes. Setup builds the dashboard and starts the backend.
 3. Open **http://127.0.0.1:8000** on your own computer. Keep the terminal open.
@@ -82,6 +82,13 @@ does not establish readiness; zero bets leave profit/ROI unavailable.
 
 The Windows launcher and DPAPI code require validation on an actual Windows machine;
 development validation was performed on Linux.
+
+The launcher explicitly selects 64-bit Python 3.12 and creates `.venv-win312`.
+It does not reuse an incompatible older `.venv`. It requires prebuilt Python
+packages (`--only-binary=:all:`), so SciPy must not trigger a Fortran build.
+If you see `metadata-generation-failed` / `gfortran` / `scipy`, use the updated
+launcher and install the required x86-64 Python version; do not install compilers.
+Your existing `data` folder remains separate and is not deleted by the launcher.
 
 ## Development (Linux/macOS)
 
