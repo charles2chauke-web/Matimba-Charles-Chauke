@@ -1,6 +1,6 @@
 """API-Sports direct v3 adapter. Reviewed against user-supplied v3.9.3 PDF.
 
-Only account status, league/season coverage and fixtures/results are implemented.
+Account status, league/season coverage, fixtures/results and pre-match odds requests are supported.
 No odds, xG, statistics or production betting approval is implied.
 """
 import hashlib
@@ -70,7 +70,7 @@ def text(value, maximum=150):
 def request(client, key, endpoint, params=None):
     """Fixed host/paths, no redirects or retries; raw provider errors never escape."""
     global _next_request, _cooldown_until, _daily_remaining
-    if endpoint not in ('/status', '/leagues', '/fixtures'):
+    if endpoint not in ('/status', '/leagues', '/fixtures', '/odds'):
         raise ValueError('Unsupported provider endpoint')
     if not key or not key.isascii() or any(ord(c)<33 or ord(c)>126 for c in key):
         raise ProviderError('invalid_key_format', 'The saved key has invalid characters. Copy the direct API-Sports key again without spaces.')
@@ -266,6 +266,43 @@ def fetch(client, key, league_id, seasons, current):
         datasets.append({'season': season, 'league_id': league_id, 'name': name, 'country': country,
                          'coverage': coverage, 'fixtures': parsed, 'usage': usage})
     return datasets
+
+
+def daily_leagues(client,key,current):
+    """Discover future NS fixtures on the generation day in South African time."""
+    day=current.astimezone(history.SAST).date()
+    rows,_=collection(client,key,'/fixtures',{'date':day.isoformat(),'timezone':'Africa/Johannesburg'})
+    leagues={};seen=set()
+    try:
+        for raw in rows:
+            if raw['fixture']['status']['short']!='NS':continue
+            league_id=integer(raw['league']['id'],1)
+            season=integer(raw['league']['season'],1900,2200)
+            fixture=parse_fixture(raw,league_id,season,current)
+            if fixture is None:continue
+            kickoff=datetime.fromisoformat(fixture['kickoff_utc'])
+            if kickoff<=current or kickoff.astimezone(history.SAST).date()!=day:continue
+            pid=fixture['provider_id']
+            if pid in seen:raise ValueError()
+            seen.add(pid)
+            if league_id in leagues and leagues[league_id]['season']!=season:raise ValueError()
+            item=leagues.setdefault(league_id,{'league_id':league_id,'season':season,'fixture_ids':[],'first_kickoff':fixture['kickoff_utc']})
+            item['fixture_ids'].append(pid)
+            item['first_kickoff']=min(item['first_kickoff'],fixture['kickoff_utc'])
+    except (KeyError,TypeError,ValueError):
+        raise ProviderError('invalid_daily_fixtures','Daily fixture response is invalid. No Top Five build was started.') from None
+    return sorted(leagues.values(),key=lambda l:(l['first_kickoff'],l['league_id']))
+
+
+def available_seasons(client,key,league_id,season):
+    rows,_=collection(client,key,'/leagues',{'id':league_id})
+    try:
+        if len(rows)!=1 or rows[0]['league']['id']!=league_id:raise ValueError()
+        years={integer(s['year'],1900,2200) for s in rows[0]['seasons']}
+        if season not in years:raise ValueError()
+        return sorted(y for y in years if season-2<=y<=season)
+    except (KeyError,TypeError,ValueError):
+        raise ProviderError('coverage_unavailable','The daily fixture league/season is not available in this account’s league metadata.') from None
 
 
 def canonical(connection, table, provider_id, name):

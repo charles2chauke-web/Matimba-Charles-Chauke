@@ -5,7 +5,7 @@ import io
 import json
 import math
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from backend import history
 
@@ -220,9 +220,13 @@ def resolve_quotes(rows,cutoff,max_age_minutes):
 
 def assess(connection,snapshot,model_name,cutoff,created_at,options):
     identity=fixture_identity(snapshot['fixture'])
-    query=connection.execute('''SELECT * FROM odds_observations WHERE fixture_id=? AND fixture_identity=?
-      AND observed_at<=? AND imported_at<=? ORDER BY observed_at,id LIMIT 10001''',
-      (snapshot['fixture']['id'],identity,cutoff.isoformat(),cutoff.isoformat())).fetchall()
+    query_text='''SELECT * FROM odds_observations WHERE fixture_id=? AND fixture_identity=?
+      AND observed_at<=? AND imported_at<=?'''
+    params=[snapshot['fixture']['id'],identity,cutoff.isoformat(),cutoff.isoformat()]
+    if options.get('fresh_only'):
+        query_text+=' AND observed_at>=?'
+        params.append((cutoff-timedelta(minutes=options['max_odds_age_minutes'])).isoformat())
+    query=connection.execute(query_text+' ORDER BY observed_at,id LIMIT 10001',params).fetchall()
     if len(query)>10000:
         raise ValueError('More than 10,000 eligible odds observations; this research evaluation limit was exceeded')
     quotes=resolve_quotes([dict(row) for row in query],cutoff,options['max_odds_age_minutes'])
@@ -250,7 +254,7 @@ def assess(connection,snapshot,model_name,cutoff,created_at,options):
             'odds_observation_ids':[row['id'] for row in query], 'calibration':None,'uncertainty':None,
             'recommendation':None,'warnings':[
                 'Theoretical value depends on uncalibrated model probabilities; positive EV is not a betting recommendation.',
-                'Manual odds are unverified. A freshness window does not establish that a price is obtainable.',
+                'Imported odds are not independently verified. A freshness window does not establish that a price is obtainable.',
                 'Only regulation-time settlement is supported. Commission, taxes, stake limits and account restrictions are not modelled.',
                 'Price comparisons use only observations both observed and received by the pricing cutoff.',
                 'Odds movement is from the first stored observation, not a verified market opening price. Closing line value is unavailable.',

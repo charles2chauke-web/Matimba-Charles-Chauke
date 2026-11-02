@@ -135,5 +135,6 @@ not establish historically available information. An audited provider-availabili
 contract is needed before credible historical evaluation.
 
 No ensemble is constructed without learned, validated weights. No 75% prediction
-filter is applied to manufacture high probabilities. Top Five remains empty and
-ROI unavailable until the later validation and odds/value phases establish eligibility.
+filter is applied to manufacture high probabilities. Experimental Top Five can
+screen these estimates against provider prices. Independent profitability remains
+unvalidated; forward paper returns use recorded quotes and exclude costs.

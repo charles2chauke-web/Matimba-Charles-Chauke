@@ -1,10 +1,10 @@
 # Odds and theoretical value research
 
-This is an offline, manual evidence workflow. No live odds API has been integrated,
+The Value Betting workspace supports manual evidence imports. API-Football pre-match odds can now be imported through Top Five;
 no price availability/licence has been independently verified, and no betting
 strategy has demonstrated profitability. Model probabilities are uncalibrated.
 Positive calculated EV is a research result, not a recommendation. There is no
-automatic or real-money betting. Top Five remains empty.
+automatic or real-money betting. Top Five separately ranks experimental, value-screened selections; see [daily shortlist](daily-shortlist.md).
 
 ## Import contract
 

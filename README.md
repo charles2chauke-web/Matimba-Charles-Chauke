@@ -3,9 +3,10 @@
 Data-Driven Football Predictions and Betting Analysis
 
 **Updating an existing download?** Follow [UPDATE-WINDOWS.md](UPDATE-WINDOWS.md)
-to preserve your local data. Today's Top Five now has a functional daily research
-review and exclusion report; [qualification is still separate](docs/daily-shortlist.md)
-and cannot be bypassed by unverified estimates.
+to preserve your local data. **Top Five → Build Top Five** now discovers today's
+future fixtures across available API leagues, imports bookmaker odds and ranks up
+to five experimental selections. [Method and limitations](docs/daily-shortlist.md).
+Tomorrow's games never fill the daily list.
 
 ## Run the working research model
 
@@ -28,7 +29,9 @@ uncalibrated research estimates**, not validated betting recommendations. See th
 
 You selected API-Football as the primary provider. Account testing and fixture/results import are now implemented using the
 user-supplied official v3.9.3 documentation. Actual live access must be tested on
-your laptop; synthetic integration checks do not validate your subscription. Add your key in
+your laptop for the newly added odds/daily-discovery paths; synthetic checks do
+not validate live response compatibility. The user has already confirmed account
+access and historical model generation on Windows. Add your key in
 local **API Settings**, or securely as `API_FOOTBALL_KEY` in cloud environment
 settings and apply the saved network settings. Never send the key in chat. The
 public fallback uses no API key and never sends your API-Football credentials to GitHub.
@@ -43,7 +46,8 @@ Phase 2 now includes a historical Data Library: validated CSV imports, optional
 xG/corners/cards/half-time statistics, append-only source observations, conflict
 detection, source timestamps, and descriptive team form over up to 5/10/20 matches.
 API-Football account testing and fixture/results import are implemented;
-live validation on your laptop is pending. Other provider adapters and detailed
+the user has confirmed account access and result/model import on Windows.
+New odds/daily-discovery paths still need a local live run. Other provider adapters and detailed
 statistics import remain unavailable. See [provider integration status](docs/provider-integration.md).
 
 Phase 3 adds **experimental model research**: fitted Poisson goal strengths,
@@ -55,8 +59,8 @@ See [model methodology](docs/models.md) for assumptions, fitting limits and excl
 Phase 4 adds **manual odds and theoretical value research**: timestamped odds imports,
 best fresh imported-price comparisons, fair odds, push-aware expected value,
 same-book market overround, observed price movement, a calculator and immutable
-comparison snapshots. See [odds and value guide](docs/odds.md). There is no live
-bookmaker feed and no independently verified claim that an imported price is obtainable.
+comparison snapshots. See [odds and value guide](docs/odds.md). Top Five also imports provider-reported
+pre-match bookmaker odds. Prices update periodically and are not guaranteed obtainable.
 
 Phase 5 adds **chronological research backtesting**: receipt-aware walk-forward
 replay, saved pre-match prediction audits, an earlier calibration period, untouched
@@ -64,11 +68,12 @@ holdout scoring, raw/temperature-scaled probability comparisons, historical-pric
 flat-stake simulation, losing periods, drawdown, grouped results and immutable
 study reports. See [backtesting methodology](docs/backtesting.md).
 
-There is **no live odds/detailed-statistics import, calibrated production prediction
-model, automated schedule, bankroll simulator, validated betting recommendation or betting execution**.
-Those sections show their unavailable status. No sample fixtures or synthetic
-performance are loaded. Top Five remains empty until validated models and odds can
-support qualification. Schedule and betting thresholds remain reserved for later phases.
+The daily Top Five ranks experimental, value-screened selections and archives
+them for forward paper tracking. It does not invent five picks when fewer meet
+probability, price, freshness, model-agreement and league filters. There is **no
+calibrated production prediction model, detailed-statistics importer, automated
+schedule, bankroll simulator, independently validated betting recommendation or
+betting execution**. No synthetic fixtures or performance are loaded into your workspace.
 No outcomes or profitability are guaranteed.
 
 Backtest reports are research results, not independent validation or permission to
@@ -297,7 +302,8 @@ it does not establish actual opening or closing prices. Closing-line value is un
 The calculator accepts your own win/push probability and decimal price. For a
 win/lose market, `EV = p × odds − 1` and `fair odds = 1 / p`. With a refunded push,
 `EV = p_win × odds + p_push − 1` and `fair odds = (1 − p_push) / p_win`.
-Positive calculated EV is theoretical and does not qualify a Top Five selection.
+Positive calculated EV is theoretical. Top Five additionally screens agreement,
+probability, freshness and source evidence, while remaining experimental.
 
 ### Manual backup and restore
 

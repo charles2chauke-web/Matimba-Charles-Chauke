@@ -111,8 +111,9 @@ The adapter now supports **API Settings → Test connection** and automatic
 API-Football results/schedules in Run Model when a key is present. Default
 league 39 uses the current season and two preceding season start years.
 Namespaced provider history stays separate from community data. Detailed stats,
-xG and odds remain missing. Models and Top Five qualification remain experimental
-and unavailable for production betting respectively.
+xG remains missing; pre-match odds are now imported by Top Five. The daily Top
+Five screens experimental selections across all leagues available on the current
+SAST date. Independent production qualification remains unavailable.
 
 Live access must still be tested on the user's laptop; the development cloud
 has neither that local key nor current network access to the provider. See

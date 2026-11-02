@@ -8,18 +8,16 @@
    `start-windows.cmd`. Keep the backup. Do not copy `.venv`, `.venv-win312` or `node_modules`.
 5. Run **start-windows.cmd** in the new folder and wait for the local server.
 6. Refresh the browser with **Ctrl+F5**, then open **API Settings → Test connection**.
-7. After a successful connection test, open **Run Model → Load data & run model**.
-   The default API-Football league is 39 (English Premier League); select another
-   league ID or season start years if needed. Open **View predictions** for results.
+7. Open **Top Five → Build Top Five**. It discovers today's future matches
+   across all leagues returned by your API, fits available models and imports
+   bookmaker quotes. Keep the terminal open while the progress updates.
+8. Review the ranked cards and any coverage/exclusion messages. The daily list
+   never substitutes tomorrow's matches, and may contain fewer than five.
 
-The new page displays research candidates and qualification blockers instead of a
-development placeholder. It does not fabricate five qualified betting tips.
-
-This update adds an API-Football **Test connection** button and league
-fixture/results import. You must update the whole application, not just
-`start-windows.cmd`, to get these features. Your saved key remains untested until
-you run the test locally. Live odds and independent production model approval
-remain unfinished; qualified betting picks are not enabled by this update.
+This update adds operational **experimental Top Five selections**, source odds and
+forward paper tracking. They are not independently validated betting tips.
+Update the whole application, not just `start-windows.cmd`. A short destination
+such as **C:\Charles\app** avoids Windows path-length problems.
 Keep API keys out of chat. Windows credential backups require the same Windows
 user profile; see README.md before migrating to a different computer.
 

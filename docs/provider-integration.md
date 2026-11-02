@@ -76,13 +76,19 @@ as-of evidence, missing fields, unsupported pagination, atomic failure, removed
 fixtures, stable-ID conflicts, and the import-to-model workflow. Desktop/mobile
 browser testing also uses an isolated synthetic store.
 
-**Live account validation is still pending on the user's laptop.** The development
+**The user has confirmed live account access and fixture/model imports on Windows.**
+New odds and daily-discovery paths still require local live validation. The development
 cloud has no user key and cannot reach the official API host under its current
 network policy. A successful mock test must never be described as a working live
 connection. The app stores the actual local connection result and timestamp so
 failures can be diagnosed without sharing credentials.
 
-Not implemented: live odds, detailed match statistics, xG, corners/cards, injuries,
+Pre-match bookmaker odds and all-league daily discovery are now available through
+Top Five; see [daily shortlist](daily-shortlist.md) for timestamps, market mapping,
+pagination bounds and live-validation limitations. The source updates odds about
+every three hours; no real-time executable-price guarantee is made.
+
+Not implemented: detailed match statistics, xG, corners/cards, injuries,
 line-ups, automatic scheduling, other provider adapters, independent calibration
 approval or production Top Five qualification. Account success does not imply any
 of these capabilities or profitable forecasts.
