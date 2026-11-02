@@ -7,13 +7,19 @@
 4. Copy your old **data** folder into the new project folder, beside `backend` and
    `start-windows.cmd`. Keep the backup. Do not copy `.venv`, `.venv-win312` or `node_modules`.
 5. Run **start-windows.cmd** in the new folder and wait for the local server.
-6. Refresh the browser with **Ctrl+F5**, then open **Today's Top Five**.
+6. Refresh the browser with **Ctrl+F5**, then open **API Settings → Test connection**.
+7. After a successful connection test, open **Run Model → Load data & run model**.
+   The default API-Football league is 39 (English Premier League); select another
+   league ID or season start years if needed. Open **View predictions** for results.
 
 The new page displays research candidates and qualification blockers instead of a
 development placeholder. It does not fabricate five qualified betting tips.
 
-API-Football integration and independent production model approval remain
-unfinished. This update does not make a stored key a tested API connection.
+This update adds an API-Football **Test connection** button and league
+fixture/results import. You must update the whole application, not just
+`start-windows.cmd`, to get these features. Your saved key remains untested until
+you run the test locally. Live odds and independent production model approval
+remain unfinished; qualified betting picks are not enabled by this update.
 Keep API keys out of chat. Windows credential backups require the same Windows
 user profile; see README.md before migrating to a different computer.
 

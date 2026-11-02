@@ -10,9 +10,12 @@ and cannot be bypassed by unverified estimates.
 ## Run the working research model
 
 Start the app with `start-windows.cmd`, open the private local address below, and
-choose **Run Model → Load data & run model**. This downloads the documented CC0
-OpenFootball English Premier League feed, imports reported results, fits the
-available statistical models, and saves analyses for listed upcoming matches.
+choose **API Settings → API-Football → Test connection** to verify your saved key,
+then **Run Model → Load data & run model**. With a saved key, this imports
+API-Football league results and scheduled fixtures, fits the available statistical
+models and saves research analyses. Without a key, it uses the documented CC0
+OpenFootball English Premier League fallback. A failed API request never silently
+switches sources.
 Click **View predictions** to inspect a real-data research run. Source limitations
 and insufficient-coverage cases are shown instead of invented statistics.
 
@@ -23,8 +26,9 @@ reported result was 20 September 2026 (43 days old). These are **unverified,
 uncalibrated research estimates**, not validated betting recommendations. See the
 [working-model guide](docs/working-model.md) for provenance and the exact limitations.
 
-You selected API-Football as the primary provider. Its live adapter still requires
-current official documentation access and connection validation. Add your key in
+You selected API-Football as the primary provider. Account testing and fixture/results import are now implemented using the
+user-supplied official v3.9.3 documentation. Actual live access must be tested on
+your laptop; synthetic integration checks do not validate your subscription. Add your key in
 local **API Settings**, or securely as `API_FOOTBALL_KEY` in cloud environment
 settings and apply the saved network settings. Never send the key in chat. The
 public fallback uses no API key and never sends your API-Football credentials to GitHub.
@@ -38,9 +42,9 @@ detection, encrypted API-key storage, and persistent research preferences.
 Phase 2 now includes a historical Data Library: validated CSV imports, optional
 xG/corners/cards/half-time statistics, append-only source observations, conflict
 detection, source timestamps, and descriptive team form over up to 5/10/20 matches.
-Live provider integration is **blocked**, not completed: access to official API
-documentation was denied by the cloud network policy, and no provider key is
-configured. See [provider integration status](docs/provider-integration.md).
+API-Football account testing and fixture/results import are implemented;
+live validation on your laptop is pending. Other provider adapters and detailed
+statistics import remain unavailable. See [provider integration status](docs/provider-integration.md).
 
 Phase 3 adds **experimental model research**: fitted Poisson goal strengths,
 conditional Dixon–Coles low-score adjustment, a reported-xG-based strength model,
@@ -60,8 +64,8 @@ holdout scoring, raw/temperature-scaled probability comparisons, historical-pric
 flat-stake simulation, losing periods, drawdown, grouped results and immutable
 study reports. See [backtesting methodology](docs/backtesting.md).
 
-There is **no live API-Football integration, calibrated production prediction model, automated
-schedule, bankroll simulator, validated betting recommendation or betting execution**.
+There is **no live odds/detailed-statistics import, calibrated production prediction
+model, automated schedule, bankroll simulator, validated betting recommendation or betting execution**.
 Those sections show their unavailable status. No sample fixtures or synthetic
 performance are loaded. Top Five remains empty until validated models and odds can
 support qualification. Schedule and betting thresholds remain reserved for later phases.
@@ -166,7 +170,8 @@ changing its receipt timestamp. Corrections append new observations. The latest
 timestamp per source participates in current resolution; tied differing records or
 disagreement between sources mark the field **conflicting** and withhold the value.
 Earlier observations remain inspectable. Changing a kickoff creates a distinct
-identity; automatic entity/rescheduling reconciliation is not yet implemented.
+identity for manual CSV imports. API-Football uses stable provider IDs to track
+reschedules while preserving earlier schedule observations.
 
 Search an exact team name to inspect descriptive form and venue averages. These
 statistics are not opponent-adjusted or calibrated predictions. Small/incomplete
@@ -311,15 +316,16 @@ Backups contain sensitive data; do not upload them. An in-app backup workflow is
 `backend/odds.py`: manual price evidence, settlement-aware value and margin calculations.
 `backend/backtesting.py`: receipt-aware replay, frozen calibration, holdout scoring and simulation.
 `backend/public_data.py`: documented CC0 feed, bounded downloads, verified cache hashes and import validation.
+`backend/api_football.py`: direct API-Sports account checks, league/results import, quotas and stable IDs.
 `frontend/src`: responsive dashboard; production assets served by FastAPI.
 `tests`: labelled synthetic fixtures for automated backend checks only.
 
-Next: inspect current official provider documentation, select one provider and implement
-authorised fixtures/statistics integration with coverage, provenance and usage monitoring.
-API-Football, Sportmonks and Football-Data.org are credential slots, not implemented
-adapters. Historical depth, xG, corners, disciplinary/referee data, injuries, line-ups
-and bookmaker odds may require paid subscriptions and vary by league and plan. No
-provider coverage has been verified. No scraping integrations exist.
+API-Football account testing and fixture/results import are implemented against
+the supplied official documentation. Actual live access is pending testing on the
+user's laptop. Sportmonks and Football-Data.org remain credential slots without
+adapters. Historical depth and detailed statistics vary by league, season and plan.
+Detailed stats and bookmaker odds are not imported by the current adapter.
+No scraping integrations exist.
 
 Next work includes independent real-data validation, additional markets, qualifying selections
 and scheduling, and immutable performance

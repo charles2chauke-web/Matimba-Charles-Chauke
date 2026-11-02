@@ -150,8 +150,8 @@ def observations(connection, match_id, as_of=None):
              'observed_at': row['observed_at'], 'imported_at': row['imported_at'],
              'available_at': max(row['observed_at'], row['imported_at']),
              'metrics': json.loads(row['metrics']),
-             'observation_basis':'application_retrieval' if row['source'].startswith('OpenFootball') else 'declared_source_time',
-             'reliability': 'CC0 community report · unverified' if row['source'].startswith('OpenFootball') else 'Manual export · source not independently verified'} for row in rows]
+             'observation_basis':'application_retrieval' if row['source'].startswith(('OpenFootball','API-Football')) else 'declared_source_time',
+             'reliability': 'Provider-reported · not independently verified' if row['source'].startswith('API-Football') else 'CC0 community report · unverified' if row['source'].startswith('OpenFootball') else 'Manual export · source not independently verified'} for row in rows]
 
 
 def resolve(items):
@@ -171,7 +171,7 @@ def resolve(items):
     return {'metrics': metrics, 'conflicts': conflicts,
             'missing': [field for field in METRICS if metrics[field] is None and field not in conflicts],
             'observation_count': len(items), 'source_count': len(latest),
-            'reliability': 'Conflicting data' if conflicts else 'CC0 community reports · unverified' if items and all(i['source'].startswith('OpenFootball') for i in items) else 'Manual export · unverified'}
+            'reliability': 'Conflicting data' if conflicts else 'API-Football reports · unverified' if items and all(i['source'].startswith('API-Football') for i in items) else 'CC0 community reports · unverified' if items and all(i['source'].startswith('OpenFootball') for i in items) else 'Manual export · unverified'}
 
 
 def match_list(connection, limit=100, offset=0, team=None):

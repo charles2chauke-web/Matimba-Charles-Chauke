@@ -47,7 +47,7 @@ def build(connection,settings,current,model='poisson'):
         blockers=['Model has no independently approved calibration/deployment evidence.',
                   'Validated predictive uncertainty is unavailable.',
                   'Source statistics and fixture status have not been independently verified.']
-        if fixture['status']!='scheduled':blockers.append('Community fixture is listed/unconfirmed, not verified scheduled.')
+        if fixture['status']!='scheduled':blockers.append('Fixture is listed/unconfirmed, not verified scheduled.')
         if best['best_quote'] is None:blockers.append('No fresh, non-conflicting bookmaker odds; betting value is unverified.')
         elif best['expected_value'] is None or best['expected_value']<settings['min_ev']:blockers.append('Estimated value does not meet the saved EV requirement.')
         candidates.append({'fixture_id':fixture['id'],'run_id':saved['id'],'home':fixture['home'],'away':fixture['away'],

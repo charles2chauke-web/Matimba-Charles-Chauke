@@ -141,7 +141,8 @@ def test_status_reports_actual_data_and_live_blockers(client):
     status = client.get('/api/data/status').json()
     assert status['historical_matches'] == status['observations'] == 1
     assert not status['live_integration']
-    assert len(status['integration_blockers']) == 2
+    assert status['api_football_adapter_available']  # Availability is separate from account validation.
+    assert len(status['integration_blockers']) == 1
 
 
 def test_repeat_initialization_preserves_history_and_phase1(client):

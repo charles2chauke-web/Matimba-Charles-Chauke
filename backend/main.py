@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from backend import history, models, odds, backtesting, public_data, shortlist
+from backend import history, models, odds, backtesting, public_data, shortlist, api_football
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get('CHARLES_DATA_DIR', ROOT / 'data'))
@@ -106,6 +106,7 @@ def initialize():
         history.initialize(connection)
         odds.initialize(connection)
         backtesting.initialize(connection)
+        api_football.initialize(connection)
         # Preserve only the existing row's latest asserted state/time. Do not
         # manufacture earlier schedule/status history during migration.
         connection.execute('''INSERT INTO fixture_observations(fixture_id,identity,status,recorded_at,source)
@@ -224,6 +225,9 @@ class BacktestOptions(BaseModel):
 
 class WorkflowOptions(BaseModel):
     model_config=ConfigDict(extra='forbid')
+    source: str = Field(default='auto',pattern='^(auto|api-football|public)$')
+    league_id: int = Field(default=39,ge=1,le=100000)
+    api_seasons: list[int] | None = Field(default=None,min_length=1,max_length=3)
     seasons: list[str] | None = Field(default=None,max_length=3)
     horizon_days: int = Field(default=7,ge=1,le=14)
     max_fixtures: int = Field(default=12,ge=1,le=30)
@@ -322,7 +326,8 @@ def fixtures():
         item['kickoff_sast'] = datetime.fromisoformat(item['kickoff_utc']).astimezone(SAST).isoformat()
         item['eligible'] = item['status'] == 'scheduled' and datetime.fromisoformat(item['kickoff_utc']) > now()
         item['research_eligible'] = item['status'] in ('scheduled','listed') and datetime.fromisoformat(item['kickoff_utc']) > now()
-        item['reliability'] = 'Community schedule · status/timezone unconfirmed' if item['source'].startswith('OpenFootball') else 'Unverified manual import'
+        item['reliability'] = ('API-Football reported · not independently verified' if item['source'].startswith('API-Football')
+                               else 'Community schedule · status/timezone unconfirmed' if item['source'].startswith('OpenFootball') else 'Unverified manual import')
         result.append(item)
     return result
 
@@ -399,12 +404,13 @@ def data_status():
         matches = connection.execute('SELECT COUNT(*) FROM historical_matches').fetchone()[0]
         observations = connection.execute('SELECT COUNT(*),MAX(imported_at) FROM historical_observations').fetchone()
         sources = connection.execute('SELECT source,source_url,COUNT(*) AS observations,MAX(imported_at) AS last_import FROM historical_observations GROUP BY source,source_url ORDER BY source').fetchall()
+    check=providers()[0]['last_check']
     return {'historical_matches': matches, 'observations': observations[0], 'last_history_import': observations[1],
-            'sources': [dict(row) for row in sources], 'live_integration': False,
-            'integration_blockers': ['Official provider documentation access must be enabled and reviewed before implementing an adapter.',
-                                     'A usable provider credential is required for live validation.'],
-            'available_workflow': 'Import historical exports you are permitted to use. Source authenticity is not independently verified.',
-            'missing_features': ['Live fixtures and statistics sync', 'Provider coverage and usage monitoring', 'Validated prediction models']}
+            'sources': [dict(row) for row in sources], 'live_integration': bool(check and check['ok']),
+            'api_football_adapter_available':True,
+            'integration_blockers': ['Test your local API-Football key and run the league import to verify live account and season coverage.'],
+            'available_workflow': 'API-Football fixture/results import, public fallback, or historical CSV. Source accuracy is not independently verified.',
+            'missing_features': ['Live odds and detailed statistics import', 'Validated production prediction models']}
 
 
 @app.post('/api/fixtures/{fixture_id}/analysis')
@@ -425,7 +431,9 @@ def analyse_fixture(fixture_id: int, options: ModelOptions):
             raise HTTPException(422, str(error)) from None
     result = models.analyse(rows, fixture, cutoff, options.model_dump(), minimum)
     if record['status']=='listed':
-        result['warnings'].insert(0,'Community fixture listing is unconfirmed; its timezone is an explicit import assumption. This is research only, not a verified pre-match betting opportunity.')
+        result['warnings'].insert(0,('Provider marks the fixture time as to be defined. Its listed kickoff is unconfirmed; this is research only.'
+            if record['source'].startswith('API-Football') else
+            'Community fixture listing is unconfirmed; its timezone is an explicit import assumption. This is research only, not a verified pre-match betting opportunity.'))
     snapshot = {**result, 'fixture': fixture, 'generated_at': cutoff.isoformat(), 'training_cutoff': cutoff.isoformat(),
                 'training_start': (cutoff-timedelta(days=options.training_days)).isoformat(),
                 'options': options.model_dump(), 'minimum_sample': minimum,
@@ -584,8 +592,8 @@ def workflow_status():
         row=connection.execute('SELECT id,result FROM workflow_runs ORDER BY id DESC LIMIT 1').fetchone()
         key=connection.execute("SELECT 1 FROM providers WHERE id='api-football'").fetchone()
     present=bool(os.environ.get('API_FOOTBALL_KEY')) or key is not None
-    return {'counts':counts,'api_football_key_present':present,'api_football_adapter_available':False,
-            'api_football_blocker':'Current official documentation access/review and live connection validation are still required.',
+    return {'counts':counts,'api_football_key_present':present,'api_football_adapter_available':True,
+            'api_football_blocker':'Test your saved key in API Settings. Coverage is checked during import; models remain experimental.',
             'public_feed':{'name':'OpenFootball English Premier League','license':'CC0-1.0','license_url':public_data.LICENSE_URL,
                 'timezone':'Europe/London','timezone_basis':'Explicit assumption: the JSON feed omits offsets',
                 'independently_verified':False},
@@ -598,6 +606,8 @@ def run_workflow(options: WorkflowOptions):
         raise HTTPException(409,'A data-and-model workflow is already running')
     started=now()
     try:
+        if options.source=='api-football' or (options.source=='auto' and api_football_key(optional=True)):
+            return run_api_football_workflow(options,started)
         seasons=options.seasons if options.seasons is not None else public_data.default_seasons(started)
         try:
             public_data.validate_seasons(seasons,started)
@@ -642,7 +652,7 @@ def run_workflow(options: WorkflowOptions):
                 'The feed omits timezone offsets and authoritative match statuses. Europe/London is an explicit assumption; future fixtures remain listed/unconfirmed.',
                 'Data retrieval time is not source freshness. Latest reported result: '+str(latest)+'; '+str(age)+' days before retrieval.',
                 'No bookmaker odds, xG, corners, cards, injuries or line-ups are supplied by this feed. Missing fields remain missing.',
-                'API-Football remains the requested primary provider; its key/network/documentation validation must be completed before using that integration.']}
+                'This run explicitly uses the public fallback. Select API-Football to use your saved provider key.']}
         with db() as connection:
             cursor=connection.execute('INSERT INTO workflow_runs(created_at,result) VALUES (?,?)',(received.isoformat(),json.dumps(report,allow_nan=False)))
             run_id=cursor.lastrowid
@@ -651,15 +661,129 @@ def run_workflow(options: WorkflowOptions):
         WORKFLOW_LOCK.release()
 
 
+def api_football_key(optional=False):
+    with db() as connection:
+        row=connection.execute("SELECT encrypted_key FROM providers WHERE id='api-football'").fetchone()
+    try:
+        key=credential_cipher().decrypt(row['encrypted_key'].encode()).decode() if row else os.environ.get('API_FOOTBALL_KEY','').strip()
+    except Exception:
+        # Never echo a ciphertext, plaintext or cryptographic exception.
+        raise HTTPException(409,'The saved API-Football key cannot be decrypted under this user profile. Save the key again in API Settings.') from None
+    if not key and not optional:
+        raise HTTPException(409,'Save your direct API-Sports key in API Settings before testing or importing.')
+    return key
+
+
+def save_provider_check(key,result):
+    checked=now().isoformat()
+    # A replacement key must never inherit a result for the previous key.
+    if api_football_key(optional=True)==key:
+        with db() as connection:
+            connection.execute('INSERT OR REPLACE INTO provider_checks VALUES (?,?,?,?)',
+                ('api-football',api_football.revision(key),checked,json.dumps(result,allow_nan=False)))
+    return {**result,'checked_at':checked}
+
+
+@app.post('/api/providers/{provider}/test')
+def test_provider(provider: str):
+    check_provider(provider)
+    if provider!='api-football':
+        raise HTTPException(409,'Connection testing is currently implemented only for API-Football.')
+    key=api_football_key()
+    if not api_football.LOCK.acquire(blocking=False):
+        raise HTTPException(409,'An API-Football request is already running. Wait for it to finish.')
+    try:
+        try:
+            with api_football.client() as client:
+                result=api_football.status(client,key)
+        except api_football.ProviderError as error:
+            result=error.report()
+        return save_provider_check(key,result)
+    finally:
+        api_football.LOCK.release()
+
+
+def run_api_football_workflow(options,started):
+    key=api_football_key()
+    year=started.year if started.month>=7 else started.year-1
+    seasons=options.api_seasons if options.api_seasons is not None else [year-2,year-1,year]
+    if len(set(seasons))!=len(seasons) or any(type(s) is not int or not 2010<=s<=started.year for s in seasons):
+        raise HTTPException(422,'Select one to three distinct API-Football season start years between 2010 and the current year.')
+    if not api_football.LOCK.acquire(blocking=False):
+        raise HTTPException(409,'An API-Football request is already running. Wait for it to finish.')
+    try:
+        try:
+            with api_football.client() as client:
+                try:
+                    status=api_football.status(client,key)
+                except api_football.ProviderError as error:
+                    save_provider_check(key,error.report())
+                    raise
+                save_provider_check(key,status)
+                if not status['ok']:
+                    raise HTTPException(409,status['message'])
+                datasets=api_football.fetch(client,key,options.league_id,seasons,now())
+            received=now()
+            with db() as connection:
+                imported=api_football.ingest(connection,datasets,received)
+        except api_football.ProviderError as error:
+            # Authentication status is separate from subsequent data-import errors.
+            raise HTTPException(502,str(error)) from None
+        end=received+timedelta(days=options.horizon_days)
+        with db() as connection:
+            targets=connection.execute('''SELECT f.id,f.home,f.away FROM fixtures f JOIN api_football_fixtures p ON p.fixture_id=f.id
+                WHERE p.league_id=? AND p.last_received_at=? AND f.status='scheduled'
+                AND f.kickoff_utc>? AND f.kickoff_utc<=? ORDER BY f.kickoff_utc,f.id''',
+                (options.league_id,received.isoformat(),received.isoformat(),end.isoformat())).fetchall()
+        analyses=[]
+        for target in targets[:options.max_fixtures]:
+            result=analyse_fixture(target['id'],ModelOptions())
+            analyses.append({'fixture_id':target['id'],'home':target['home'],'away':target['away'],'run_id':result['id'],
+                'status':result['status'],'models':list(result['models']),'sample':result['eligible_matches'],'unavailable':result['unavailable']})
+        latest=imported.pop('latest_result_utc')
+        latest_date=datetime.fromisoformat(latest).astimezone(SAST).date() if latest else None
+        successful=sum(a['status']=='experimental' for a in analyses)
+        report={'status':'research_working' if successful else 'no_upcoming_fixtures' if not targets else 'insufficient_data',
+            'created_at':received.isoformat(),'completed_at':now().isoformat(),'source':'API-Football · provider-reported',
+            'competition':', '.join(imported['competitions']),'league_id':options.league_id,'seasons':seasons,**imported,
+            'history_unchanged':max(0,sum(1 for d in datasets for f in d['fixtures'] if f['metrics'] is not None)-imported['history_inserted']),
+            'models_generated':successful,'pending_analysis':max(0,len(targets)-len(analyses)),'analyses':analyses,
+            'latest_reported_result_date':latest_date.isoformat() if latest_date else None,
+            'result_age_days':(received.astimezone(SAST).date()-latest_date).days if latest_date else None,
+            'sources':[{'url':api_football.BASE+'/fixtures','retrieved_at':received.isoformat(),'cache_status':'provider_response',
+                        'season':d['season'],'coverage':d['coverage']} for d in datasets],
+            'warnings':['Provider account and league-season access were tested. This does not independently validate source accuracy or betting profitability.',
+                'Only regulation-time FT results train this adapter. Extra-time/penalty, awarded and walkover results are excluded.',
+                'xG, bookmaker odds, corners, cards, injuries and line-ups are not imported by this adapter. Missing statistics remain missing.',
+                'These forecasts remain uncalibrated research. Production betting qualification is unavailable.']}
+        with db() as connection:
+            cursor=connection.execute('INSERT INTO workflow_runs(created_at,result) VALUES (?,?)',(received.isoformat(),json.dumps(report,allow_nan=False)))
+            run_id=cursor.lastrowid
+        return {'id':run_id,**report}
+    finally:
+        api_football.LOCK.release()
+
+
 @app.get('/api/providers')
 def providers():
     with db() as connection:
         saved = {row['id']: row['updated_at'] for row in connection.execute('SELECT id,updated_at FROM providers')}
+        row=connection.execute("SELECT * FROM provider_checks WHERE provider='api-football'").fetchone()
     env_present=bool(os.environ.get('API_FOOTBALL_KEY'))
-    return [{'id': key, 'name': name, 'configured': key in saved or (key=='api-football' and env_present), 'updated_at': saved.get(key),
-             'status': 'Environment key present · untested' if key=='api-football' and env_present else 'Stored · connection untested' if key in saved else 'Not configured',
-             'integration': 'Pending official documentation review', 'usage': None,
-             'connection_test_available': False} for key, name in PROVIDERS.items()]
+    try:
+        current_key=api_football_key(optional=True)
+        check={**json.loads(row['result']),'checked_at':row['checked_at']} if row and current_key and row['credential_revision']==api_football.revision(current_key) else None
+    except HTTPException:
+        check=None
+    result=[]
+    for key,name in PROVIDERS.items():
+        configured=key in saved or (key=='api-football' and env_present)
+        last=check if key=='api-football' else None
+        status=('Connected · last test successful' if last['ok'] else 'Last connection test failed') if last else 'Stored · connection untested' if configured else 'Not configured'
+        result.append({'id':key,'name':name,'configured':configured,'updated_at':saved.get(key),'status':status,
+            'integration':'Account test and league/results import available' if key=='api-football' else 'Adapter not implemented',
+            'usage':last.get('usage') if last else None,'connection_test_available':key=='api-football','last_check':last})
+    return result
 
 
 def check_provider(provider):
@@ -676,6 +800,7 @@ def save_key(provider: str, payload: ProviderKey):
     encrypted = credential_cipher().encrypt(key.encode()).decode()
     with db() as connection:
         connection.execute('INSERT INTO providers VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET encrypted_key=excluded.encrypted_key,updated_at=excluded.updated_at', (provider, encrypted, now().isoformat()))
+        connection.execute('DELETE FROM provider_checks WHERE provider=?',(provider,))
     return {'saved': True}
 
 
@@ -684,6 +809,7 @@ def delete_key(provider: str):
     check_provider(provider)
     with db() as connection:
         connection.execute('DELETE FROM providers WHERE id=?', (provider,))
+        connection.execute('DELETE FROM provider_checks WHERE provider=?',(provider,))
     return {'deleted': True}
 
 

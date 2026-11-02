@@ -97,19 +97,24 @@ fake fixtures or manufactured performance records.
 
 `GET /api/workflow/status` reports actual counts, presence (never value) of a
 configured API-Football key, and the last workflow result. `POST /api/workflow/run`
-with JSON `{}` runs the public fallback; optional controls are `seasons`,
-`horizon_days` and `max_fixtures`. Only one workflow runs at a time in this private
+with JSON `{}` automatically uses API-Football when a key is saved, otherwise
+the public fallback. `source` can explicitly select `api-football` or `public`.
+API controls are `league_id` (default 39) and `api_seasons` (start-year integers);
+public `seasons` uses YYYY-YY strings. Shared controls are `horizon_days` and
+`max_fixtures`. Only one workflow runs at a time in this private
 single-process application.
 
 ## API-Football primary integration
 
-The user has API-Football access, but no usable key was injected or stored when
-the workflow was validated. The configured cloud policy still did not expose the
-official documentation/API destinations. Required destinations and the
-`API_FOOTBALL_KEY` secret requirement are saved for secure environment review.
+The official v3.9.3 documentation was reviewed from the user's uploaded PDF.
+The adapter now supports **API Settings → Test connection** and automatic
+API-Football results/schedules in Run Model when a key is present. Default
+league 39 uses the current season and two preceding season start years.
+Namespaced provider history stays separate from community data. Detailed stats,
+xG and odds remain missing. Models and Top Five qualification remain experimental
+and unavailable for production betting respectively.
 
-Local Windows: enter the key in **API Settings**. Cloud: enter it securely as
-`API_FOOTBALL_KEY`, apply the saved network settings, then complete current official
-documentation review and live validation before enabling an adapter. Key presence
-is not shown as a successful connection. Subscription-specific historical/xG/odds
-coverage remains unverified. See [provider integration status](provider-integration.md).
+Live access must still be tested on the user's laptop; the development cloud
+has neither that local key nor current network access to the provider. See
+[provider integration](provider-integration.md) for supported endpoints,
+validation, error handling and exact limitations.
