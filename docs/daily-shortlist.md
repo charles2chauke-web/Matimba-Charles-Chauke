@@ -109,3 +109,31 @@ Automated and browser validation use synthetic responses and real model fitting.
 The user previously confirmed live account access and successful result/model
 imports on Windows. The newly added odds/daily-discovery paths still require a
 real run on that laptop; the cloud holds no copy of the user's key.
+
+## Odds recovery update
+
+The initial live build report found 179 daily fixtures and generated 81 analyses,
+but imported no bookmaker quotes. Twelve leagues reported a combined validation
+error; the report did not identify the specific failed fields. That report alone
+cannot establish which upstream field caused each rejection.
+
+The importer now isolates invalid fixture objects, bookmaker objects, markets and
+individual prices. Missing/non-numeric/non-finite prices and prices at or below one
+are withheld without discarding valid prices in the same market or other matches.
+An incorrect kickoff, league/season, naive timestamp, future update or post-kickoff
+quote still excludes that fixture's prices. Ambiguous duplicate IDs remain withheld.
+Incomplete/inconsistent pagination remains a fatal collection failure.
+
+Every league now records `odds_diagnostics`: returned fixture count, accepted quote
+count, skipped fixture count, fixed rejection codes/counts and up to twelve samples
+containing reason codes, numeric fixture IDs, field type names and safely parsed
+ISO timestamps. No unparsed upstream values,
+upstream errors, API keys, account data or request headers enter these diagnostics.
+The UI shows skipped-item reasons and distinguishes new from unchanged quotes.
+All accepted records are validated before the single database transaction.
+
+A live rerun on the user's laptop is still required to establish whether this
+recovers the rejected responses, and to identify any remaining schema mismatch.
+Synthetic mixed-response tests prove isolation/validation behaviour, not actual
+bookmaker availability. Existing data, sample thresholds and probability/EV
+requirements are unchanged.

@@ -470,9 +470,15 @@ def build_top_five(job_id,options):
                         with db() as connection:
                             fixtures={r['provider_id']:dict(r) for r in connection.execute('''SELECT f.*,p.provider_id FROM fixtures f
                                 JOIN api_football_fixtures p ON p.fixture_id=f.id WHERE p.league_id=? AND p.season=?''',(league,season))}
-                            records,skipped=provider_odds.parse(raw,fixtures,league,season,received)
-                            item['odds_inserted']=odds.ingest(connection,records)['inserted']
-                            item['odds_fixtures_skipped']=skipped
+                            records,diagnostics=provider_odds.parse_with_diagnostics(raw,fixtures,league,season,received)
+                            result=odds.ingest(connection,records)
+                            item['odds_inserted']=result['inserted']
+                            item['odds_unchanged']=result['duplicates']
+                            item['odds_fixtures_skipped']=diagnostics['fixtures_skipped']
+                            item['odds_diagnostics']=diagnostics
+                            if not records:
+                                reasons=', '.join(diagnostics['rejection_counts']) or 'No bookmaker prices returned for this league/date'
+                                item['error']='No usable odds: '+reasons+'.'
                     finally:
                         api_football.LOCK.release()
             except (HTTPException,api_football.ProviderError,ValueError) as error:
