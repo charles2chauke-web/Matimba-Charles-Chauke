@@ -36,3 +36,32 @@ Download the updated project and run its `start-windows.cmd`. It selects Python
 packages. An older incompatible `.venv` is ignored. There is no need to install
 Fortran or remove your application data. Actual execution of the Windows script
 still needs confirmation on Windows; wheel availability is checked separately.
+
+## Stuck at “Waiting for application startup” with a large database
+
+The startup observation migration previously lacked an index on
+`fixture_observations.fixture_id`, causing repeated scans as fixture/history
+coverage grew. The updated backend creates this index before the migration and
+logs each startup stage. A synthetic 30,000-fixture / 89,997-observation legacy
+store migrated in 0.027 seconds on the Linux development machine; Windows timing
+will vary. The user's Windows hang has not yet been confirmed by a local rerun.
+
+You can repair an existing installation without reinstalling or changing results:
+
+1. Close all Charles server terminal windows.
+2. In File Explorer open the project folder containing `start-windows.cmd`.
+3. Type `cmd` in File Explorer's address bar and press Enter.
+4. Paste this single line and press Enter:
+
+```bat
+.venv-win312\Scripts\python.exe -c "import sqlite3; c=sqlite3.connect('file:data/charles.sqlite3?mode=rw', uri=True, timeout=10); c.execute('CREATE INDEX IF NOT EXISTS fixture_observation_fixture ON fixture_observations(fixture_id)'); c.commit(); c.close(); print('Startup index repaired.')"
+```
+
+5. After `Startup index repaired.`, run `start-windows.cmd` normally.
+
+The command opens an existing database only (`mode=rw`) and creates a lookup index.
+It does not delete results, model snapshots or encrypted credentials. If the file
+cannot be opened, check that you opened Command Prompt in the actual project
+folder. `database is locked` means another process may still be using the store;
+close the old server rather than launching more copies. Installations using a
+custom `CHARLES_DATA_DIR` must use their configured database path instead.

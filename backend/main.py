@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -81,6 +82,8 @@ def credential_cipher():
 
 
 def initialize():
+    log=logging.getLogger('uvicorn.error')
+    log.info('Charles startup: preparing local database tables and indexes')
     DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     with db() as connection:
         connection.executescript('''
@@ -99,6 +102,7 @@ def initialize():
           id INTEGER PRIMARY KEY, fixture_id INTEGER NOT NULL, identity TEXT NOT NULL,
           status TEXT NOT NULL, recorded_at TEXT NOT NULL, source TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS fixture_observation_identity ON fixture_observations(identity,recorded_at);
+        CREATE INDEX IF NOT EXISTS fixture_observation_fixture ON fixture_observations(fixture_id);
         CREATE TABLE IF NOT EXISTS workflow_runs (
           id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, result TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS top_five_runs (
@@ -110,6 +114,7 @@ def initialize():
           PRIMARY KEY(provider_id,day));
         ''')
         connection.execute('INSERT OR IGNORE INTO settings VALUES (1, ?)', (json.dumps(Settings().model_dump()),))
+        log.info('Charles startup: checking history and provider tables')
         history.initialize(connection)
         odds.initialize(connection)
         backtesting.initialize(connection)
@@ -117,10 +122,13 @@ def initialize():
         connection.execute("UPDATE top_five_jobs SET status='interrupted' WHERE status='running'")
         # Preserve only the existing row's latest asserted state/time. Do not
         # manufacture earlier schedule/status history during migration.
+        log.info('Charles startup: checking existing fixture observations')
         connection.execute('''INSERT INTO fixture_observations(fixture_id,identity,status,recorded_at,source)
             SELECT f.id,f.identity,f.status,f.imported_at,f.source FROM fixtures f
             WHERE NOT EXISTS (SELECT 1 FROM fixture_observations o WHERE o.fixture_id=f.id)''')
+    log.info('Charles startup: opening local credential protection')
     credential_cipher()
+    log.info('Charles startup: ready')
 
 
 @asynccontextmanager
