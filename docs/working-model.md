@@ -1,3 +1,10 @@
+# Strict daily update
+
+All new model generation is now limited to today in SAST. Previous references to
+seven-day targets are historical workflow documentation, not active prediction
+permissions. See [strict daily policy](strict-daily-policy.md) for the exact market,
+major-competition and corner/yellow-card modelling contracts.
+
 # Working data-to-model workflow
 
 The model can now produce experimental estimates from reported football data,

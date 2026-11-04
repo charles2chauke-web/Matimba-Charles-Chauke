@@ -147,7 +147,7 @@ def fixture_and_history(client):
         m=row['metrics']
         writer.writerow([row['home'],row['away'],row['competition'],kickoff.astimezone(main.SAST).isoformat(),m['goals_home'],m['goals_away'],(kickoff+timedelta(hours=3)).isoformat(),m['xg_home'],m['xg_away']])
     assert client.post('/api/history/import',json={'csv':output.getvalue(),'source':'Synthetic model test source'}).status_code == 200
-    csv_fixture='home,away,competition,kickoff_sast,status\nSynthetic 0,Synthetic 1,Synthetic League,'+(current+timedelta(days=1)).astimezone(main.SAST).isoformat()+',scheduled'
+    csv_fixture='home,away,competition,kickoff_sast,status\nSynthetic 0,Synthetic 1,Synthetic League,'+min(current+timedelta(minutes=30),(current.astimezone(main.SAST).replace(hour=23,minute=59,second=0,microsecond=0))).astimezone(main.SAST).isoformat()+',scheduled'
     assert client.post('/api/fixtures/import',json={'csv':csv_fixture}).status_code == 200
     return rows,csv_fixture
 

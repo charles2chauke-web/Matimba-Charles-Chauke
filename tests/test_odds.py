@@ -227,7 +227,7 @@ def test_after_kickoff_odds_rejected_even_when_timestamp_is_past(client):
 
 def test_value_requires_an_available_model(client):
     current=main.now()
-    csv='home,away,competition,kickoff_sast,status\nSynthetic A,Synthetic B,Synthetic League,'+(current+timedelta(days=1)).astimezone(main.SAST).isoformat()+',scheduled'
+    csv='home,away,competition,kickoff_sast,status\nSynthetic A,Synthetic B,Synthetic League,'+min(current+timedelta(minutes=30),current.astimezone(main.SAST).replace(hour=23,minute=59,second=0,microsecond=0)).astimezone(main.SAST).isoformat()+',scheduled'
     client.post('/api/fixtures/import',json={'csv':csv})
     run=client.post('/api/fixtures/1/analysis',json={}).json()
     assert client.post(f"/api/analysis/{run['id']}/value",json={}).status_code==409

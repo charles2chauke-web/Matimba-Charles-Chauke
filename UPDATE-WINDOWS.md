@@ -1,9 +1,13 @@
 # Update an existing Windows installation
 
-The latest odds recovery update preserves usable quotes when other records are
-invalid. After updating, open **Top Five**, select **Value screened**, and click
-**Build Top Five**. League progress shows specific skipped-item reasons. If prices
-are still missing, share `/api/top-five/jobs/latest`; it contains no API key.
+The latest strict-daily update limits new analysis to today's SAST fixtures and
+only the six requested outcomes: goals over 1.5/2.5, home/away win, corners over 7.5,
+yellow cards over 2.5. Major leagues get priority when eligible. It also imports
+reported FT corner/card statistics and replaces those pages' placeholders.
+After updating, use **Top Five → Build Top Five**. The first count-statistics import
+can take several minutes; keep the terminal open and watch the progress. Your
+existing history, keys and startup-index repair are preserved. See
+[the exact policy](docs/strict-daily-policy.md).
 
 1. Close the app's terminal with **Ctrl+C** before copying its database.
 2. In your old project folder, copy the entire **data** folder to a safe backup

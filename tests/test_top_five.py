@@ -106,7 +106,7 @@ def value_setup(client,monkeypatch,price_factor=1.10):
 
 
 def value_report(client,**options):
-    return client.get('/api/shortlist',params={'mode':'value','window':'today','max_odds_age_minutes':180,**options}).json()
+    return client.get('/api/research/shortlist',params={'mode':'value','window':'today','max_odds_age_minutes':180,**options}).json()
 
 
 def test_actual_priced_top_selection_and_home_count(client,monkeypatch):
@@ -120,13 +120,14 @@ def test_actual_priced_top_selection_and_home_count(client,monkeypatch):
     assert selected['selection_stage']=='value_screened' and not selected['qualified']
     assert report['qualified_count']==0  # No unearned independent validation claim.
     with main.db() as c:c.execute('INSERT INTO top_five_runs(created_at,result) VALUES (?,?)',(NOW.isoformat(),json.dumps(report)))
-    assert client.get('/api/dashboard').json()['top_five']['selection_count']==1
+    # The old broad research list picks over 0.5; strict Home must reject it.
+    assert client.get('/api/dashboard').json()['top_five']['selection_count']==0
 
 
 def test_negative_ev_excluded_but_probability_mode_separate(client,monkeypatch):
     value_setup(client,monkeypatch,.98)
     assert value_report(client)['selection_count']==0
-    assert client.get('/api/shortlist?window=today&mode=research').json()['selection_count']==1
+    assert client.get('/api/research/shortlist?window=today&mode=research').json()['selection_count']==1
 
 
 def test_wrong_date_old_source_stale_quote_or_model_not_promoted(client,monkeypatch):
@@ -190,9 +191,10 @@ def test_top_build_rejects_future_window_and_missing_key(client):
 def test_build_all_daily_leagues_archives_and_reports_partial_coverage(client,monkeypatch):
     value_setup(client,monkeypatch);save(client)
     monkeypatch.setattr(provider,'status',lambda *a:{'ok':True,'message':'Synthetic account success'})
+    monkeypatch.setattr(provider_odds,'load_count_markets',lambda *a:{})
     monkeypatch.setattr(provider,'daily_leagues',lambda *a:[{'league_id':999,'season':2026,'fixture_ids':[100]}, {'league_id':555,'season':2026,'fixture_ids':[200]}])
     monkeypatch.setattr(provider,'available_seasons',lambda *a:[2026])
-    def workflow(options,*args):
+    def workflow(options,*args,**kwargs):
         if options.league_id==555:raise main.HTTPException(502,'Synthetic unavailable coverage')
         return {'models_generated':1,'competition':'Synthetic League','seasons':[2026]}
     monkeypatch.setattr(main,'run_api_football_workflow',workflow)
@@ -205,8 +207,8 @@ def test_build_all_daily_leagues_archives_and_reports_partial_coverage(client,mo
     assert response.status_code==200
     job=client.get('/api/top-five/jobs/latest').json()
     assert job['status']=='completed' and job['completed_leagues']==2
-    assert job['leagues'][1]['error']=='Synthetic unavailable coverage'
-    assert job['report']['window']=='today' and job['report']['selection_count']==1
+    assert next(l for l in job['leagues'] if l['league_id']==555)['error']=='Synthetic unavailable coverage'
+    assert job['report']['window']=='today' and job['report']['selection_count']==0  # No requested market exceeds 75% in this fixture.
     report=client.get('/api/top-five/runs/'+str(job['report_id'])).json()
     assert report['selections']==job['report']['selections']
     assert not main.WORKFLOW_LOCK.locked()
@@ -273,6 +275,7 @@ def test_pagination_filters_requested_sast_day():
 def test_midnight_during_build_cannot_archive_yesterdays_list(client,monkeypatch):
     value_setup(client,monkeypatch);save(client)
     monkeypatch.setattr(provider,'status',lambda *a:{'ok':True,'message':'Synthetic account success'})
+    monkeypatch.setattr(provider_odds,'load_count_markets',lambda *a:{})
     def discovery(*args):
         monkeypatch.setattr(main,'now',lambda:NOW+timedelta(days=1))
         return [{'league_id':999,'season':2026,'fixture_ids':[100]}]

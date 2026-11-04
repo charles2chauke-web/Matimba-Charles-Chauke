@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, Field, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from backend import history, models, odds, backtesting, public_data, shortlist, api_football, provider_odds
+from backend import history, models, odds, backtesting, public_data, shortlist, api_football, provider_odds, daily_policy, count_models, provider_statistics, strict_shortlist
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = Path(os.environ.get('CHARLES_DATA_DIR', ROOT / 'data'))
@@ -114,6 +114,9 @@ def initialize():
           PRIMARY KEY(provider_id,day));
         ''')
         connection.execute('INSERT OR IGNORE INTO settings VALUES (1, ?)', (json.dumps(Settings().model_dump()),))
+        stored_settings=json.loads(connection.execute('SELECT value FROM settings WHERE id=1').fetchone()[0])
+        if stored_settings.get('window')!='today':
+            connection.execute('UPDATE settings SET value=? WHERE id=1',(json.dumps({**stored_settings,'window':'today'}),))
         log.info('Charles startup: checking history and provider tables')
         history.initialize(connection)
         odds.initialize(connection)
@@ -173,7 +176,7 @@ class Settings(BaseModel):
     min_ev: float = Field(default=.03, ge=0, le=10)
     min_sample: int = Field(default=30, ge=1, le=10000)
     max_per_league: int = Field(default=2, ge=1, le=5)
-    window: str = Field(default='today', pattern='^(today|24h)$')
+    window: str = Field(default='today', pattern='^today$')
     schedule: str = Field(default='07:00', pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
     primary_provider: str = Field(default='api-football', pattern='^(api-football|sportmonks|football-data)$')
 
@@ -245,8 +248,9 @@ class WorkflowOptions(BaseModel):
     league_id: int = Field(default=39,ge=1,le=100000)
     api_seasons: list[int] | None = Field(default=None,min_length=1,max_length=3)
     seasons: list[str] | None = Field(default=None,max_length=3)
-    horizon_days: int = Field(default=7,ge=1,le=14)
+    horizon_days: int = Field(default=1,ge=1,le=1)
     max_fixtures: int = Field(default=12,ge=1,le=30)
+    statistics_budget: int = Field(default=0,ge=0,le=120)
 
 
 class TopFiveOptions(BaseModel):
@@ -256,9 +260,10 @@ class TopFiveOptions(BaseModel):
     mode: str = Field(default='value',pattern='^(value|research)$')
     model: str = Field(default='poisson',pattern='^(poisson|dixon_coles)$')
     max_odds_age_minutes: int = Field(default=180,ge=1,le=240)
-    min_probability: float = Field(default=.75,ge=0,le=1)
+    min_probability: float = Field(default=.75,ge=.75,le=1)
     min_ev: float = Field(default=.03,ge=0,le=10)
     max_per_league: int = Field(default=2,ge=1,le=5)
+    statistics_budget: int = Field(default=500,ge=0,le=750)
 
 
 def normalized(text):
@@ -352,8 +357,8 @@ def fixtures():
         item = dict(row)
         del item['identity']
         item['kickoff_sast'] = datetime.fromisoformat(item['kickoff_utc']).astimezone(SAST).isoformat()
-        item['eligible'] = item['status'] == 'scheduled' and datetime.fromisoformat(item['kickoff_utc']) > now()
-        item['research_eligible'] = item['status'] in ('scheduled','listed') and datetime.fromisoformat(item['kickoff_utc']) > now()
+        item['eligible'] = item['status'] == 'scheduled' and daily_policy.is_today(item['kickoff_utc'],now())
+        item['research_eligible'] = item['status'] in ('scheduled','listed') and daily_policy.is_today(item['kickoff_utc'],now())
         item['reliability'] = ('API-Football reported · not independently verified' if item['source'].startswith('API-Football')
                                else 'Community schedule · status/timezone unconfirmed' if item['source'].startswith('OpenFootball') else 'Unverified manual import')
         result.append(item)
@@ -375,7 +380,7 @@ def dashboard():
         top=None
         if latest_top:
             saved=json.loads(latest_top['result'])
-            top=shortlist.build(connection,{**settings,**saved['settings']},current,saved['model'],saved['mode'],saved['window'],saved['max_odds_age_minutes'],saved.get('league_ids'))
+            top=strict_shortlist.build(connection,{**settings,**saved['settings']},current,saved['model'],saved['mode'],saved['max_odds_age_minutes'],saved.get('league_ids'))
     return {'upcoming': len(upcoming), 'analysed': 0, 'research_analysed':research_count,'qualified': 0, 'average_probability': None,
             'historical_roi': None, 'last_import': last, 'last_successful_analysis': None,
             'selections': [], 'fixtures': upcoming, 'phase': 5,
@@ -395,7 +400,7 @@ def import_history(payload: HistoricalImport):
         return history.ingest(connection, records, imported_at.isoformat())
 
 
-@app.get('/api/shortlist')
+@app.get('/api/research/shortlist')
 def daily_shortlist(model: str=Query('poisson',pattern='^(poisson|dixon_coles|xg_poisson)$'),
                     mode: str=Query('research',pattern='^(research|value)$'),
                     window: str | None=Query(None,pattern='^(today|24h|7d)$'),
@@ -411,6 +416,15 @@ def daily_shortlist(model: str=Query('poisson',pattern='^(poisson|dixon_coles|xg
             return shortlist.build(connection,settings,now().astimezone(SAST),model,mode,window,max_odds_age_minutes,leagues)
         except ValueError as error:
             raise HTTPException(422,str(error)) from None
+
+
+@app.get('/api/daily-predictions')
+@app.get('/api/shortlist')
+def strict_daily_predictions(mode: str=Query('research',pattern='^(research|value)$'),model: str=Query('poisson',pattern='^(poisson|dixon_coles)$'),
+    min_probability:float=Query(.75,ge=.75,le=1),min_ev:float=Query(.03,ge=0,le=10),max_per_league:int=Query(2,ge=1,le=5),max_odds_age_minutes:int=Query(180,ge=1,le=240)):
+    settings={**get_settings(),'min_probability':min_probability,'min_ev':min_ev,'max_per_league':max_per_league}
+    with db() as connection:
+        return strict_shortlist.build(connection,settings,now(),model,mode,max_odds_age_minutes)
 
 
 def top_five_progress(job_id,report,status='running'):
@@ -435,7 +449,11 @@ def build_top_five(job_id,options):
                 save_provider_check(key,account)
                 if not account['ok']:raise HTTPException(409,account['message'])
                 discovered=api_football.daily_leagues(client,key,now())
+                if options.mode=='value':
+                    try:progress['count_odds_coverage']=provider_odds.load_count_markets(client,key)
+                    except api_football.ProviderError as error:progress['count_odds_error']=str(error)
         if options.leagues is not None:discovered=[l for l in discovered if l['league_id'] in options.leagues]
+        discovered.sort(key=lambda l:(l['league_id'] not in daily_policy.MAJOR_LEAGUES,l['first_kickoff'] if 'first_kickoff' in l else '',l['league_id']))
         checked=now().isoformat()
         with db() as connection:
             connection.execute('DELETE FROM top_five_daily_fixtures WHERE day=?',(generation_day.isoformat(),))
@@ -445,6 +463,7 @@ def build_top_five(job_id,options):
         progress['fixtures_discovered']=sum(len(l['fixture_ids']) for l in discovered)
         top_five_progress(job_id,progress)
         successful=[]
+        remaining_statistics=options.statistics_budget
         for daily in discovered:
             if now().astimezone(SAST).date()!=generation_day:
                 progress['message']='The SAST date changed during the build. Build again for the new day; yesterday’s matches were not promoted.'
@@ -458,7 +477,11 @@ def build_top_five(job_id,options):
                 with api_football.LOCK:
                     with api_football.client() as client:
                         seasons=api_football.available_seasons(client,key,league,daily['season'])
-                run=run_api_football_workflow(WorkflowOptions(source='api-football',league_id=league,api_seasons=seasons,max_fixtures=30),now(),daily['fixture_ids'])
+                def statistics_progress(message):
+                    progress['message']=message;top_five_progress(job_id,progress)
+                run=run_api_football_workflow(WorkflowOptions(source='api-football',league_id=league,api_seasons=seasons,max_fixtures=30,statistics_budget=min(120,remaining_statistics)),now(),daily['fixture_ids'],progress=statistics_progress)
+                item['statistics']=run.get('statistics',{})
+                remaining_statistics=max(0,remaining_statistics-item['statistics'].get('calls',0))
                 item['models_generated']=run['models_generated']
                 item['competition']=run['competition']
                 if run.get('pending_analysis'):
@@ -501,7 +524,7 @@ def build_top_five(job_id,options):
             top_five_progress(job_id,progress,'interrupted')
             return
         with db() as connection:
-            report=shortlist.build(connection,settings,current,options.model,options.mode,'today',options.max_odds_age_minutes,successful)
+            report=strict_shortlist.build(connection,settings,current,options.model,options.mode,options.max_odds_age_minutes,successful)
             report['league_ids']=successful
             cursor=connection.execute('INSERT INTO top_five_runs(created_at,result) VALUES (?,?)',(current.isoformat(),json.dumps(report,allow_nan=False)))
             report_id=cursor.lastrowid
@@ -581,7 +604,14 @@ def top_five_performance():
                     home,away=state['goals_home'],state['goals_away']
                     # The decision must precede every result observation used to settle.
                     if home is not None and away is not None and observations and all(datetime.fromisoformat(o['available_at'])>datetime.fromisoformat(archive['created_at']) for o in observations):
-                        outcome=backtesting.settlement(candidate['market'],candidate['selection'],candidate['line'],home,away)
+                        if candidate['market'] in ('corners','yellow_cards'):
+                            metric='corners' if candidate['market']=='corners' else 'yellow'
+                            counts=[state[metric+'_'+s] for s in ('home','away')]
+                            if any(v is None for v in counts):
+                                entries.append(item);continue
+                            outcome='win' if sum(counts)>float(candidate['line']) else 'loss'
+                        else:
+                            outcome=backtesting.settlement(candidate['market'],candidate['selection'],candidate['line'],home,away)
                         item.update({'status':outcome,'profit':candidate['decimal_odds']-1 if outcome=='win' else 0 if outcome=='push' else -1})
                 entries.append(item)
     settled=[e for e in entries if e['profit'] is not None]
@@ -645,6 +675,8 @@ def analyse_fixture(fixture_id: int, options: ModelOptions):
             raise HTTPException(404, 'Fixture not found')
         if record['status'] not in ('scheduled','listed') or datetime.fromisoformat(record['kickoff_utc']) <= cutoff:
             raise HTTPException(409, 'Research analysis requires a future scheduled fixture or an explicitly unconfirmed community listing')
+        if not daily_policy.is_today(record['kickoff_utc'],cutoff):
+            raise HTTPException(409,'Strict daily policy: generate predictions only for upcoming fixtures playing today in SAST.')
         fixture = {key: record[key] for key in ('id','home','away','competition','status','source','imported_at')}
         fixture['kickoff_sast'] = datetime.fromisoformat(record['kickoff_utc']).astimezone(SAST).isoformat()
         try:
@@ -652,6 +684,8 @@ def analyse_fixture(fixture_id: int, options: ModelOptions):
         except models.ModelUnavailable as error:
             raise HTTPException(422, str(error)) from None
     result = models.analyse(rows, fixture, cutoff, options.model_dump(), minimum)
+    result['count_models'],result['count_unavailable']=count_models.analyse(rows,fixture,cutoff,options.model_dump(),minimum)
+    if result['count_models']:result['status']='experimental'
     if record['status']=='listed':
         result['warnings'].insert(0,('Provider marks the fixture time as to be defined. Its listed kickoff is unconfirmed; this is research only.'
             if record['source'].startswith('API-Football') else
@@ -849,9 +883,10 @@ def run_workflow(options: WorkflowOptions):
                 fixture_inserted+=stored['inserted'];fixture_updated+=stored['updated']
         end=received+timedelta(days=options.horizon_days)
         with db() as connection:
-            targets=connection.execute('''SELECT id,home,away FROM fixtures WHERE competition=?
+            targets=connection.execute('''SELECT id,home,away,kickoff_utc FROM fixtures WHERE competition=?
                 AND status IN ('scheduled','listed') AND kickoff_utc>? AND kickoff_utc<=? ORDER BY kickoff_utc,id''',
                 (public_data.COMPETITION,received.isoformat(),end.isoformat())).fetchall()
+        targets=[t for t in targets if daily_policy.is_today(t['kickoff_utc'],now())]
         analyses=[]
         for target in targets[:options.max_fixtures]:
             result=analyse_fixture(target['id'],ModelOptions())
@@ -925,7 +960,7 @@ def test_provider(provider: str):
         api_football.LOCK.release()
 
 
-def run_api_football_workflow(options,started,target_provider_ids=None):
+def run_api_football_workflow(options,started,target_provider_ids=None,progress=lambda message:None):
     key=api_football_key()
     year=started.year if started.month>=7 else started.year-1
     seasons=options.api_seasons if options.api_seasons is not None else [year-2,year-1,year]
@@ -948,16 +983,21 @@ def run_api_football_workflow(options,started,target_provider_ids=None):
             received=now()
             with db() as connection:
                 imported=api_football.ingest(connection,datasets,received)
+            statistics={'calls':0,'cached':0,'available':0,'errors':[]}
+            if options.statistics_budget:
+                with api_football.client() as client:
+                    statistics=provider_statistics.enrich(db,client,key,options.league_id,now(),options.statistics_budget,progress,clock=now)
         except api_football.ProviderError as error:
             # Authentication status is separate from subsequent data-import errors.
             raise HTTPException(502,str(error)) from None
         end=received+timedelta(days=options.horizon_days)
         with db() as connection:
-            targets=connection.execute('''SELECT f.id,f.home,f.away,p.provider_id FROM fixtures f JOIN api_football_fixtures p ON p.fixture_id=f.id
+            targets=connection.execute('''SELECT f.id,f.home,f.away,f.kickoff_utc,p.provider_id FROM fixtures f JOIN api_football_fixtures p ON p.fixture_id=f.id
                 WHERE p.league_id=? AND p.last_received_at=? AND f.status='scheduled'
                 AND f.kickoff_utc>? AND f.kickoff_utc<=? ORDER BY f.kickoff_utc,f.id''',
                 (options.league_id,received.isoformat(),received.isoformat(),end.isoformat())).fetchall()
         if target_provider_ids is not None:targets=[t for t in targets if t['provider_id'] in target_provider_ids]
+        targets=[t for t in targets if daily_policy.is_today(t['kickoff_utc'],now())]
         analyses=[]
         for target in targets[:options.max_fixtures]:
             result=analyse_fixture(target['id'],ModelOptions())
@@ -969,6 +1009,7 @@ def run_api_football_workflow(options,started,target_provider_ids=None):
         report={'status':'research_working' if successful else 'no_upcoming_fixtures' if not targets else 'insufficient_data',
             'created_at':received.isoformat(),'completed_at':now().isoformat(),'source':'API-Football · provider-reported',
             'competition':', '.join(imported['competitions']),'league_id':options.league_id,'seasons':seasons,**imported,
+            'statistics':statistics,
             'history_unchanged':max(0,sum(1 for d in datasets for f in d['fixtures'] if f['metrics'] is not None)-imported['history_inserted']),
             'models_generated':successful,'pending_analysis':max(0,len(targets)-len(analyses)),'analyses':analyses,
             'latest_reported_result_date':latest_date.isoformat() if latest_date else None,
@@ -977,7 +1018,7 @@ def run_api_football_workflow(options,started,target_provider_ids=None):
                         'season':d['season'],'coverage':d['coverage']} for d in datasets],
             'warnings':['Provider account and league-season access were tested. This does not independently validate source accuracy or betting profitability.',
                 'Only regulation-time FT results train this adapter. Extra-time/penalty, awarded and walkover results are excluded.',
-                'xG, bookmaker odds, corners, cards, injuries and line-ups are not imported by this adapter. Missing statistics remain missing.',
+                'Reported FT corners/cards are imported within the statistics budget when available. Missing counts stay missing. Top Five loads compatible bookmaker quotes separately; xG, injuries and line-ups remain unavailable.',
                 'These forecasts remain uncalibrated research. Production betting qualification is unavailable.']}
         with db() as connection:
             cursor=connection.execute('INSERT INTO workflow_runs(created_at,result) VALUES (?,?)',(received.isoformat(),json.dumps(report,allow_nan=False)))

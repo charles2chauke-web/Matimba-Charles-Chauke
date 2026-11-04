@@ -62,7 +62,7 @@ not followed. No arbitrary URL input is accepted. No keys are sent to the public
    upcoming fixtures are valid outcomes; they do not mean the API key failed.
 
 A default three-season run makes one account-status call and up to six data calls.
-It analyses up to 12 scheduled matches within seven days. Limits are configurable
+It analyses up to 12 scheduled matches today in SAST. Limits are configurable
 through the existing workflow request. API history is namespaced separately from
 manual/community competitions; no fuzzy reconciliation or mixed-source training.
 First import can therefore need a full historical window even if public data exists.
@@ -88,7 +88,10 @@ Top Five; see [daily shortlist](daily-shortlist.md) for timestamps, market mappi
 pagination bounds and live-validation limitations. The source updates odds about
 every three hours; no real-time executable-price guarantee is made.
 
-Not implemented: detailed match statistics, xG, corners/cards, injuries,
+Reported FT corners/yellow/red-card statistics are now imported for strict daily
+count modelling; see [strict daily policy](strict-daily-policy.md).
+
+Not implemented: xG, injuries,
 line-ups, automatic scheduling, other provider adapters, independent calibration
 approval or production Top Five qualification. Account success does not imply any
 of these capabilities or profitable forecasts.

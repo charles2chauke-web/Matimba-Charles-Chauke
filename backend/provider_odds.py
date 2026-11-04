@@ -7,6 +7,27 @@ import math
 from backend import api_football as provider, odds
 
 SOURCE='API-Football · pre-match bookmaker quotes'
+EXTRA_MARKETS={}
+
+
+def load_count_markets(client,key):
+    """Resolve IDs from the official catalogue; generic card/points markets excluded."""
+    global EXTRA_MARKETS
+    rows,_=provider.collection(client,key,'/odds/bets',{})
+    allowed={'Total Corners':'corners','Corners Over Under':'corners','Corners Over/Under':'corners',
+             'Total Yellow Cards':'yellow_cards','Yellow Cards Over/Under':'yellow_cards'}
+    mapping={}
+    for row in rows:
+        if not isinstance(row,dict):continue
+        name=row.get('name');pid=row.get('id')
+        if type(pid) is int and pid>0 and pid not in (1,5,8,12) and isinstance(name,str) and name in allowed:
+            mapping[pid]=(name,allowed[name])
+    EXTRA_MARKETS=mapping
+    return {'corners':any(v[1]=='corners' for v in mapping.values()),'yellow_cards':any(v[1]=='yellow_cards' for v in mapping.values())}
+
+
+def supported_names():
+    return {1:'Match Winner',5:'Goals Over/Under',8:'Both Teams Score',12:'Double Chance',**{pid:item[0] for pid,item in EXTRA_MARKETS.items()}}
 
 
 def pages(client,key,league,season,max_pages=5,day=None):
@@ -31,7 +52,7 @@ def pages(client,key,league,season,max_pages=5,day=None):
 
 def market(bet):
     """Whitelist full-match markets by BOTH provider ID and name; skip others."""
-    names={1:'Match Winner',5:'Goals Over/Under',8:'Both Teams Score',12:'Double Chance'}
+    names=supported_names()
     if not isinstance(bet,dict) or names.get(bet.get('id'))!=bet.get('name'):
         return []
     values=bet.get('values')
@@ -41,7 +62,10 @@ def market(bet):
     for value in values:
         if not isinstance(value,dict):raise provider.ProviderError('invalid_odds','A bookmaker quote is invalid.')
         label=value.get('value')
-        if bet['id']==1:
+        if bet['id'] in EXTRA_MARKETS:
+            kind=EXTRA_MARKETS[bet['id']][1];line=7.5 if kind=='corners' else 2.5
+            mapped={f'Over {line}':(kind,'over',str(line)),f'Under {line}':(kind,'under',str(line))}.get(label)
+        elif bet['id']==1:
             selection={'Home':'home','Draw':'draw','Away':'away'}.get(label)
             mapped=('1x2',selection,'') if selection else None
         elif bet['id']==8:
@@ -174,7 +198,7 @@ def parse_with_diagnostics(rows,fixtures,league,season,current):
         if price<=1:return 'quote_price_not_above_one'
         if price>10000:return 'quote_price_above_limit'
         return 'quote_value_invalid'
-    supported={1:'Match Winner',5:'Goals Over/Under',8:'Both Teams Score',12:'Double Chance'}
+    supported=supported_names()
     for row,pid in zip(rows,ids):
         try:
             if pid in duplicates:reject('duplicate_fixture_id')

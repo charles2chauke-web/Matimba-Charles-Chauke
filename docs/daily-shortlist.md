@@ -1,3 +1,10 @@
+# Current strict daily contract
+
+The [strict daily policy](strict-daily-policy.md) supersedes the original broad
+market/ranking description below. Only today’s upcoming fixtures and the requested
+six market/selection combinations can enter the active Top Five. Major competitions
+are prioritised; count markets need reported FT data and their own coverage checks.
+
 # Daily Top Five
 
 ## User contract

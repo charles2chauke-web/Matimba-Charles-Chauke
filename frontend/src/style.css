@@ -28,3 +28,7 @@
 .home-top-five{padding:12px 22px}.home-top-five button{display:block;width:100%;text-align:left;padding:14px 0;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--text)}.home-top-five strong{display:block;font-size:12px}.home-top-five span,.home-top-five p{display:block;font-size:10px;color:var(--muted);line-height:1.8;margin-top:7px}
 
 .odds-rejection-note{display:block;line-height:1.8;color:var(--muted);overflow-wrap:anywhere}
+
+.count-fixture-select{display:block;width:100%;max-width:560px;margin-top:12px;padding:11px;border:1px solid var(--line);border-radius:5px;background:var(--input);color:var(--text);font-size:11px;min-width:0}
+
+.count-controls>.panel-heading{flex-wrap:wrap}.count-controls>.panel-heading>div{min-width:0;flex:1 1 240px}.count-controls button{max-width:100%;white-space:normal}

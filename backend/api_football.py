@@ -1,7 +1,7 @@
 """API-Sports direct v3 adapter. Reviewed against user-supplied v3.9.3 PDF.
 
 Account status, league/season coverage, fixtures/results and pre-match odds requests are supported.
-No odds, xG, statistics or production betting approval is implied.
+Dedicated statistics/odds modules validate their own payloads. No production betting approval is implied.
 """
 import hashlib
 import json
@@ -48,6 +48,9 @@ def initialize(connection):
       provider_status TEXT NOT NULL, kickoff_utc TEXT NOT NULL,
       home_id INTEGER NOT NULL, away_id INTEGER NOT NULL, league_id INTEGER NOT NULL,
       season INTEGER NOT NULL, metrics TEXT);
+    CREATE INDEX IF NOT EXISTS api_football_observation_fixture ON api_football_observations(provider_id,id);
+    CREATE TABLE IF NOT EXISTS api_football_statistics (
+      provider_id INTEGER PRIMARY KEY, observed_at TEXT NOT NULL, score TEXT NOT NULL, metrics TEXT NOT NULL);
     ''')
 
 
@@ -70,7 +73,7 @@ def text(value, maximum=150):
 def request(client, key, endpoint, params=None):
     """Fixed host/paths, no redirects or retries; raw provider errors never escape."""
     global _next_request, _cooldown_until, _daily_remaining
-    if endpoint not in ('/status', '/leagues', '/fixtures', '/odds'):
+    if endpoint not in ('/status', '/leagues', '/fixtures', '/odds','/fixtures/statistics','/odds/bets'):
         raise ValueError('Unsupported provider endpoint')
     if not key or not key.isascii() or any(ord(c)<33 or ord(c)>126 for c in key):
         raise ProviderError('invalid_key_format', 'The saved key has invalid characters. Copy the direct API-Sports key again without spaces.')
@@ -317,10 +320,14 @@ def canonical(connection, table, provider_id, name):
     return canonical_name
 
 
-def record_history(connection, fixture, metrics, received):
+def record_history(connection, fixture, metrics, received, preserve_statistics=False):
     identity = fixture['identity']
     prior = connection.execute('''SELECT o.metrics FROM historical_observations o JOIN historical_matches m ON m.id=o.match_id
         WHERE m.identity=? AND o.source=? ORDER BY o.observed_at DESC,o.id DESC LIMIT 1''', (identity, SOURCE)).fetchone()
+    if preserve_statistics and metrics is not None and prior:
+        previous=json.loads(prior['metrics'])
+        if all(previous.get('goals_'+s)==metrics.get('goals_'+s) for s in ('home','away')):
+            metrics={**metrics,**{k:previous.get(k) for k in ('corners_home','corners_away','yellow_home','yellow_away','red_home','red_away') if metrics.get(k) is None}}
     absent = metrics is None
     metrics = metrics if metrics is not None else {field: None for field in history.METRICS}
     if (prior is None and absent) or (prior is not None and json.loads(prior['metrics']) == metrics):
@@ -379,7 +386,7 @@ def ingest(connection, datasets, received):
                 home_id,away_id,league_id,season,metrics) VALUES (?,?,?,?,?,?,?,?,?)''',
                 (item['provider_id'],received.isoformat(),item['provider_status'],item['kickoff_utc'],item['home_id'],item['away_id'],
                  league_id,item['season'],json.dumps(item['metrics'],allow_nan=False)))
-            results += record_history(connection, fixture, item['metrics'], received)
+            results += record_history(connection, fixture, item['metrics'], received,preserve_statistics=True)
             if item['metrics'] is not None:
                 latest = max(latest or item['kickoff_utc'], item['kickoff_utc'])
         returned = {item['provider_id'] for item in dataset['fixtures']}

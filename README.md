@@ -8,6 +8,21 @@ future fixtures across available API leagues, imports bookmaker odds and ranks u
 to five experimental selections. [Method and limitations](docs/daily-shortlist.md).
 Tomorrow's games never fill the daily list.
 
+## Strict daily markets
+
+The app now generates new predictions **only for today's upcoming SAST fixtures**.
+Top Five considers only over 1.5/2.5 goals, home/away win, over 7.5 total corners and
+over 2.5 total yellow cards. Eligible major domestic/UEFA competitions get priority.
+One outcome per match is ranked by the lower model estimate, with a 75% probability
+floor and sample/stability checks. These remain experimental estimates, not verified
+win rates. See [strict policy and count models](docs/strict-daily-policy.md).
+
+Build Top Five loads reported FT corner/card statistics within a visible request
+budget (500 new calls by default), caches them, and withholds missing-data markets.
+The first build can take several minutes. Corners Analysis and Bookings Analysis
+now have functional count views. Historical results still train the models; future
+fixtures are excluded from analysis choices and generation.
+
 ## Run the working research model
 
 Start the app with `start-windows.cmd`, open the private local address below, and
@@ -47,8 +62,8 @@ xG/corners/cards/half-time statistics, append-only source observations, conflict
 detection, source timestamps, and descriptive team form over up to 5/10/20 matches.
 API-Football account testing and fixture/results import are implemented;
 the user has confirmed account access and result/model import on Windows.
-New odds/daily-discovery paths still need a local live run. Other provider adapters and detailed
-statistics import remain unavailable. See [provider integration status](docs/provider-integration.md).
+New odds/daily-discovery paths still need a local live run. Other provider adapters, xG, injuries and referee imports remain unavailable.
+Reported FT corners/yellow-card statistics are supported by the strict daily workflow. See [provider integration status](docs/provider-integration.md).
 
 Phase 3 adds **experimental model research**: fitted Poisson goal strengths,
 conditional Dixon–Coles low-score adjustment, a reported-xG-based strength model,
@@ -71,7 +86,7 @@ study reports. See [backtesting methodology](docs/backtesting.md).
 The daily Top Five ranks experimental, value-screened selections and archives
 them for forward paper tracking. It does not invent five picks when fewer meet
 probability, price, freshness, model-agreement and league filters. There is **no
-calibrated production prediction model, detailed-statistics importer, automated
+calibrated production prediction model, injury/referee/xG importer, automated
 schedule, bankroll simulator, independently validated betting recommendation or
 betting execution**. No synthetic fixtures or performance are loaded into your workspace.
 No outcomes or profitability are guaranteed.
@@ -280,7 +295,7 @@ fixture_id,bookmaker,market,selection,line,decimal_odds,observed_at,settlement
 ```
 
 Fixture IDs are shown in the Value Betting fixture selector. Odds must use
-`regulation_90` settlement; other rules, corners, cards, Asian lines and extra-time
+`regulation_90` settlement; other rules, booking points, Asian lines and extra-time
 markets are not accepted. See the guide for exact market/selection codes. Source
 timestamps must be past, offset-aware datetimes before kickoff. Imports are atomic,
 append-only and deduplicated. Maximum 5,000 rows / 1 MB UTF-8 per odds import.
@@ -330,7 +345,8 @@ API-Football account testing and fixture/results import are implemented against
 the supplied official documentation. Actual live access is pending testing on the
 user's laptop. Sportmonks and Football-Data.org remain credential slots without
 adapters. Historical depth and detailed statistics vary by league, season and plan.
-Detailed stats and bookmaker odds are not imported by the current adapter.
+Reported FT corner/card statistics and compatible pre-match bookmaker quotes are
+imported by the strict daily modules. xG, injury and referee feeds remain unavailable.
 No scraping integrations exist.
 
 Next work includes independent real-data validation, additional markets, qualifying selections

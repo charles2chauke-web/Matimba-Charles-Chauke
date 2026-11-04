@@ -100,6 +100,8 @@ def test_validation_does_not_echo_credentials(client):
 def test_settings_persist_and_validate(client):
     settings=client.get('/api/settings').json()
     settings['window']='24h'
+    assert client.put('/api/settings',json=settings).status_code == 422
+    settings['window']='today'
     settings['min_probability']=.8
     assert client.put('/api/settings',json=settings).status_code == 200
     assert client.get('/api/settings').json()['min_probability'] == .8

@@ -90,7 +90,8 @@ def test_unchanged_results_do_not_rewrite_receipts_and_corrections_append(client
         assert public_data.ingest_history(c,parsed['records'],NOW+timedelta(days=1))['inserted']==1
 
 
-def test_public_listing_research_only_and_manual_status_preserved(client):
+def test_public_listing_research_only_and_manual_status_preserved(client,monkeypatch):
+    monkeypatch.setattr(main,'now',lambda:NOW+timedelta(days=3))
     parsed=public_data.parse_dataset(dataset(),NOW,7)
     with main.db() as c:
         public_data.ingest_fixtures(c,parsed['fixtures'],NOW)
@@ -110,7 +111,7 @@ def synthetic_feed():
         kickoff=main.datetime.fromisoformat(row['kickoff_utc']).astimezone(public_data.ZoneInfo('Europe/London'))
         matches.append({'date':kickoff.date().isoformat(),'time':kickoff.strftime('%H:%M'),'team1':row['home'],'team2':row['away'],
                         'score':{'ft':[row['metrics']['goals_home'],row['metrics']['goals_away']]}})
-    matches.append({'date':'2026-11-03','time':'20:00','team1':'Synthetic 0','team2':'Synthetic 1'})
+    matches.append({'date':'2026-11-02','time':'15:00','team1':'Synthetic 0','team2':'Synthetic 1'})
     parsed=public_data.parse_dataset(dataset({'name':'English Premier League 2026/27','matches':matches}),NOW,7)
     return [{'data':{'url':URL,'sha256':'synthetic','retrieved_at':NOW.isoformat(),'cache_status':'test_fixture'},**parsed}]
 

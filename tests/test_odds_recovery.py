@@ -92,9 +92,10 @@ def test_malformed_market_excludes_market_not_entire_bookmaker():
 def test_real_job_path_imports_valid_subset_and_retains_diagnostics(client,monkeypatch):
     value_setup(client,monkeypatch);save(client)
     monkeypatch.setattr(provider,'status',lambda *a:{'ok':True,'message':'Synthetic account success'})
+    monkeypatch.setattr(provider_odds,'load_count_markets',lambda *a:{})
     monkeypatch.setattr(provider,'daily_leagues',lambda *a:[{'league_id':999,'season':2026,'fixture_ids':[100]}])
     monkeypatch.setattr(provider,'available_seasons',lambda *a:[2026])
-    monkeypatch.setattr(main,'run_api_football_workflow',lambda *a:{'models_generated':1,'competition':'Synthetic League','seasons':[2026]})
+    monkeypatch.setattr(main,'run_api_football_workflow',lambda *a,**kw:{'models_generated':1,'competition':'Synthetic League','seasons':[2026]})
     raw=raw_odds();raw['fixture']['id']=100;raw['league']['id']=999
     raw['bookmakers'][0]['bets'][0]['values'].append({'value':'Home','odd':'1.00'})
     monkeypatch.setattr(provider_odds,'pages',lambda *a,**kw:[raw])

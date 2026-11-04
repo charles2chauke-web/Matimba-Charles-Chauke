@@ -15,14 +15,14 @@ def prepare(client,monkeypatch):
     # analysis clock slightly forward, without changing any receipt timestamps.
     current=main.now()+timedelta(minutes=2)
     monkeypatch.setattr(main,'now',lambda:current)
-    settings=client.get('/api/settings').json();settings['window']='24h'
+    settings=client.get('/api/settings').json();settings['window']='today'
     client.put('/api/settings',json=settings)
     run=client.post('/api/fixtures/1/analysis',json={}).json()
     return run,settings,current
 
 
 def test_empty_page_has_actual_explanation_not_placeholder(client):
-    result=client.get('/api/shortlist').json()
+    result=client.get('/api/research/shortlist').json()
     assert result['research_watchlist']==[] and result['qualified']==[]
     assert result['qualification_available'] is False
     assert 'Production qualification' in result['qualification_explanation']
@@ -30,7 +30,7 @@ def test_empty_page_has_actual_explanation_not_placeholder(client):
 
 def test_research_candidate_real_math_no_fake_odds_or_qualification(client,monkeypatch):
     run,settings,current=prepare(client,monkeypatch)
-    report=client.get('/api/shortlist').json()
+    report=client.get('/api/research/shortlist').json()
     assert len(report['research_watchlist'])==1
     item=report['research_watchlist'][0]
     assert item['probability']>=settings['min_probability']
@@ -44,10 +44,10 @@ def test_research_candidate_real_math_no_fake_odds_or_qualification(client,monke
 
 def test_probability_filter_does_not_raise_estimates(client,monkeypatch):
     run,settings,current=prepare(client,monkeypatch)
-    first=client.get('/api/shortlist').json()['research_watchlist'][0]['probability']
+    first=client.get('/api/research/shortlist').json()['research_watchlist'][0]['probability']
     settings['min_probability']=1
     client.put('/api/settings',json=settings)
-    report=client.get('/api/shortlist').json()
+    report=client.get('/api/research/shortlist').json()
     assert not report['research_watchlist']
     stored=client.get('/api/analysis/'+str(run['id'])).json()
     assert stored==run
@@ -61,11 +61,11 @@ def test_stale_model_and_unavailable_model_are_explained(client,monkeypatch):
         stored={k:v for k,v in run.items() if k!='id'}
         stored['models'].pop('xg_poisson',None)
         c.execute('UPDATE model_runs SET result=? WHERE id=?',(json.dumps(stored),run['id']))
-    assert not client.get('/api/shortlist?model=xg_poisson').json()['research_watchlist']
+    assert not client.get('/api/research/shortlist?model=xg_poisson').json()['research_watchlist']
     with main.db() as c:
         stored['generated_at']=(current-timedelta(hours=25)).isoformat()
         c.execute('UPDATE model_runs SET result=? WHERE id=?',(json.dumps(stored),run['id']))
-    report=client.get('/api/shortlist').json()
+    report=client.get('/api/research/shortlist').json()
     assert 'freshness' in report['excluded'][0]['reason']
 
 
@@ -73,11 +73,11 @@ def test_sast_today_window_and_non_scheduled_statuses(client,monkeypatch):
     run,settings,current=prepare(client,monkeypatch)
     with main.db() as c:
         c.execute("UPDATE fixtures SET status='cancelled'")
-    assert client.get('/api/shortlist').json()['fixtures_in_window']==0
+    assert client.get('/api/research/shortlist').json()['fixtures_in_window']==0
     settings['window']='today'
     client.put('/api/settings',json=settings)
-    with main.db() as c:c.execute("UPDATE fixtures SET status='scheduled'")
-    assert client.get('/api/shortlist').json()['fixtures_in_window']==0
+    with main.db() as c:c.execute("UPDATE fixtures SET status='scheduled',kickoff_utc=?",((current+timedelta(days=1)).isoformat(),))
+    assert client.get('/api/research/shortlist').json()['fixtures_in_window']==0
 
 
 def test_league_limit_and_five_cap_are_enforced(client,monkeypatch):
@@ -93,7 +93,7 @@ def test_league_limit_and_five_cap_are_enforced(client,monkeypatch):
             copy={k:v for k,v in run.items() if k!='id'}
             copy['fixture']={**copy['fixture'],'id':cursor.lastrowid,'home':home,'competition':competition}
             c.execute('INSERT INTO model_runs(fixture_id,generated_at,status,result) VALUES (?,?,?,?)',(cursor.lastrowid,current.isoformat(),'experimental',json.dumps(copy)))
-    report=client.get('/api/shortlist').json()
+    report=client.get('/api/research/shortlist').json()
     watch=report['research_watchlist']
     assert len(watch)==5
     assert sum(c['competition']=='Synthetic League' for c in watch)<=settings['max_per_league']

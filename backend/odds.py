@@ -12,6 +12,7 @@ from backend import history
 HEADER = ['fixture_id','bookmaker','market','selection','line','decimal_odds','observed_at','settlement']
 SETTLEMENT = 'regulation_90'
 OUTCOMES = {'1x2': ('home','draw','away'), 'goals': ('over','under'), 'btts': ('yes','no'),
+            'corners':('over','under'),'yellow_cards':('over','under'),
             'team_goals_home': ('over','under'), 'team_goals_away': ('over','under'),
             'double_chance': ('home_or_draw','away_or_draw','home_or_away'), 'draw_no_bet': ('home','away')}
 
@@ -69,6 +70,10 @@ def parse(content, source, source_url, current, fixtures):
             line=row['line']
             if market=='goals':
                 allowed={.5,1.5,2.5,3.5}
+            elif market=='corners':
+                allowed={7.5}
+            elif market=='yellow_cards':
+                allowed={2.5}
             elif market.startswith('team_goals_'):
                 allowed={.5}
             else:
